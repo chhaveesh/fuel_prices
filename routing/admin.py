@@ -10,7 +10,7 @@ class FuelStationAdmin(admin.ModelAdmin):
     search_fields = ("name", "city")
 
 
-@admin.register(City)
+@admin.register(City) 
 class CityAdmin(admin.ModelAdmin):
     list_display = ("name", "state", "latitude", "longitude")
     search_fields = ("name",)
