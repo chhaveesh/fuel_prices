@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fuel route{% if trip %}: {{ trip.start.resolved }} → {{ trip.finish.resolved }}{% endif %}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    .panel { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff;
+             padding: 12px 16px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+             max-width: 340px; max-height: 85vh; overflow: auto; font-size: 13px; }
+    .panel h2 { margin: 0 0 4px; font-size: 16px; }
+    .total { font-size: 22px; font-weight: 700; color: #15803d; margin: 6px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    td, th { padding: 4px; border-bottom: 1px solid #eee; text-align: left; }
+    .num { text-align: right; }
+    .stop-icon { background: #2563eb; color: #fff; border: 2px solid #fff; border-radius: 50%;
+                 width: 26px; height: 26px; line-height: 22px; text-align: center; font-weight: 700;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+    .error { padding: 24px; color: #b91c1c; }
+  </style>
+</head>
+<body>
+{% if error %}
+  <div class="error"><h2>Could not plan trip</h2><p>{{ error }}</p></div>
+{% else %}
+  <div id="map"></div>
+  <div class="panel">
+    <h2>{{ trip.start.resolved }} → {{ trip.finish.resolved }}</h2>
+    <div>{{ trip.summary.distance_miles }} mi · ~{{ trip.summary.duration_hours }} h · {{ trip.summary.fuel_stops }} stop{{ trip.summary.fuel_stops|pluralize }}</div>
+    <div class="total">${{ trip.summary.total_fuel_cost_usd }}</div>
+    <div>{{ trip.summary.total_gallons }} gal at {{ trip.summary.mpg }} mpg, {{ trip.summary.vehicle_range_miles }} mi range</div>
+    <table>
+      <tr><th>#</th><th>Station</th><th class="num">$/gal</th><th class="num">Gal</th><th class="num">Cost</th></tr>
+      {% for s in trip.fuel_stops %}
+      <tr><td>{{ s.stop }}</td><td>{{ s.name }}<br><small>{{ s.city }}, {{ s.state }} · mile {{ s.route_mile }}</small></td>
+          <td class="num">{{ s.price_per_gallon }}</td><td class="num">{{ s.gallons }}</td><td class="num">${{ s.cost_usd }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {{ trip|json_script:"trip-data" }}
+  <script>
+    const trip = JSON.parse(document.getElementById("trip-data").textContent);
+    const map = L.map("map");
+
+    // OpenStreetMap tiles (free, no key). OSM requires a Referer header,
+    // so referrerPolicy is set explicitly (see SECURE_REFERRER_POLICY too).
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      referrerPolicy: "strict-origin-when-cross-origin",
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const line = L.polyline(trip.route.coordinates.map(([lng, lat]) => [lat, lng]),
+                            { color: "#2563eb", weight: 5, opacity: 0.8 }).addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [40, 40] });
+
+    L.circleMarker([trip.start.lat, trip.start.lng], { radius: 9, color: "#15803d", fillOpacity: 1 })
+      .addTo(map).bindPopup("<b>Start:</b> " + trip.start.resolved);
+    L.circleMarker([trip.finish.lat, trip.finish.lng], { radius: 9, color: "#b91c1c", fillOpacity: 1 })
+      .addTo(map).bindPopup("<b>Finish:</b> " + trip.finish.resolved);
+
+    trip.fuel_stops.forEach(s => {
+      const icon = L.divIcon({ className: "", html: `<div class="stop-icon">${s.stop}</div>`, iconSize: [26, 26] });
+      L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(
+        `<b>${s.stop}. ${s.name}</b><br>${s.address}<br>${s.city}, ${s.state}<br>` +
+        `Mile ${s.route_mile} · $${s.price_per_gallon}/gal<br>${s.gallons} gal = <b>$${s.cost_usd}</b>`);
+    });
+  </script>
+{% endif %}
+</body>
+</html>

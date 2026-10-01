@@ -1,0 +1,6 @@
+Django
+djangorestframework
+numpy
+scipy
+requests
+python-dotenv
